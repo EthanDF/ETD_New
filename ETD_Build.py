@@ -18,6 +18,12 @@ def readRawData():
 
     return etdData
 
+def reverseAuthorName(author):
+
+    comma = author.find(',')
+    reverseAuthor = author[comma+1:]+' '+author[:comma]
+    return reverseAuthor
+
 def createRecord():
 
     etdData = readRawData()
@@ -98,7 +104,7 @@ def createRecord():
     else:
         titleA = title.rstrip()+' /'
     marc245ind2 = '0'
-    byAuthor = 'Sajjad Abazari Aghdam'
+    byAuthor = reverseAuthorName(author.rstrip())
     rec.add_field(
         Field(
             tag='245',
@@ -106,7 +112,7 @@ def createRecord():
             subfields=[
                 'a', titleA.rstrip(),
                 'b', titleB,
-                'c', 'by '+byAuthor+'.'
+                'c', 'by '+byAuthor.lstrip().rstrip()+'.'
             ]))
 
     #add MARC 264 - twice, once for copyright and one for regular
@@ -163,9 +169,12 @@ def createRecord():
                 '2', 'rdacarrier'
             ]))
 
+    # add Dissertation Note, MARC 502
+    #get date for subfield....
+
     # add summary note, MARC 520
     abstact = etdData[1][14].rstrip()
-    print(abstact)
+
     rec.add_field(
         Field(
             tag='520',

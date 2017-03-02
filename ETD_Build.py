@@ -6,10 +6,19 @@ from urllib import request
 from urllib import error
 import datetime
 
+outputFile = 'processing_files\\results.dat'
+nonFilingCharacters = []
+nfcList = 'processing_files\\non-filing_characters.txt'
+
+with open(nfcList) as f:
+    tempF = f.readlines()
+    for line in tempF:
+        nonFilingCharacters.append(line.strip('\n'))
+
 def readRawData():
     """Read in the CSV file from digital library"""
 
-    rawData = 'Z:\\FenichelE\\ETDs\\2016_03FA_etd.csv'
+    rawData = 'processing_files\\2016_03FA_etd.csv'
     etdData = []
     with open(rawData, 'r', encoding='utf-8') as c:
         reader = csv.reader(c)
@@ -24,19 +33,55 @@ def reverseAuthorName(author):
     reverseAuthor = author[comma+1:]+' '+author[:comma]
     return reverseAuthor
 
-def createRecord():
+def determineNFChars(title):
 
-    etdData = readRawData()
+    title = title.upper()
+    ind2 = 0
+    for nfc in nonFilingCharacters:
+        # print(nfc, len(nfc))
+        if title[:len(nfc.upper())] == nfc.upper():
+            ind2 = len(nfc)
+            break
+
+    return ind2
+
+def determineCampus(location):
+    campus = 'Boca Raton'
+    if location == 'Florida Atlantic University Digital Library: Boca Raton, Fla.':
+        campus = 'Boca Raton'
+    else:
+        print("no location found")
+        return
+    return campus
+
+def createRecord(testList):
+
+    author = testList[0]
+    title = testList[1]
+    date = testList[2]
+    date2 = testList[3]
+    location = testList[4]
+    degree = testList[5]
+    description = testList[6]
+    language = testList[7]
+    purl = testList[8]
 
     rec = Record()
-    #update Leader data
     ldrData = rec.leader
-    rec.leader = ldrData[:4]+'nam'+ldrData[7:9]+'a'+ldrData[10:17]+'Li'+ldrData[19:]
+    #update Leader data
+
+    type6 = 'a'
+    BLvl7 = 'm'
+    ELvl17 = 'I'
+    Desc18 = 'i'
+
+    ldrData = rec.leader
+    rec.leader = ldrData[0:6]+type6+BLvl7+ldrData[8:10]+ldrData[10:17]+ELvl17+Desc18+ldrData[19:]
 
     #create MARC 008
-    date1 = '2016'
-    date2 = '2016'
-    DtST = 'd'
+    date1 = date
+    date2 = date2
+    DtST = 't'
     Ctry = 'flu'
     ills = '    '
     Audn = ' '
@@ -50,8 +95,21 @@ def createRecord():
     litf = '0'
     biog = ' '
 
+    # establish language
+    lang = 'eng'
+    if language == 'English':
+        lang = 'eng'
+    elif language == 'Spanish':
+        lang = 'spa'
+    elif language == 'French':
+        lang = 'fra'
+
+    marc00838 = ' '
+    Srce = 'd'
+
+
     #create nowtime
-    year = str(datetime.datetime.now().year)
+    year = str(datetime.datetime.now().year)[2:]
     month = datetime.datetime.now().month
     if month < 10:
         month = '0'+str(month)
@@ -65,7 +123,8 @@ def createRecord():
     enteredDate = year+month+day
 
     #put together the MARC 008 field
-    marc008 = enteredDate+DtST+date1+date2+Ctry+ills+Audn+form+cont+gPub+conf+fest+indx+marc00832+litf+biog
+    marc008 = enteredDate+DtST+date1+date2+Ctry+ills+Audn+form+cont+gPub+conf+fest+indx+marc00832+litf+biog+\
+              lang+marc00838+Srce
 
     field008 = Field(tag='008', data = marc008)
     rec.add_field(field008)
@@ -83,18 +142,18 @@ def createRecord():
             ]))
 
     # add author data
-    author = 'Abazari Aghdam, Sajjad'
+
     rec.add_field(
         Field(
             tag= '100',
-            indicators= ['1',''],
+            indicators= ['1',' '],
             subfields = [
                 'a', author.rstrip()+',',
                 'e', 'author.'
             ]))
 
     # add main title
-    title = 'A Systematic Review and Quantitative Meta-Analysis of the Accuracy of Visual Inspection for Cervical Cancer Screening: Does Provider Type or Training Matter?'
+
     titleA = ''
     titleB = ''
     if ':' in title:
@@ -103,7 +162,7 @@ def createRecord():
         titleB = title[titleBreak+1:].rstrip() + ' /'
     else:
         titleA = title.rstrip()+' /'
-    marc245ind2 = '0'
+    marc245ind2 = determineNFChars(title)
     byAuthor = reverseAuthorName(author.rstrip())
     rec.add_field(
         Field(
@@ -117,12 +176,16 @@ def createRecord():
 
     #add MARC 264 - twice, once for copyright and one for regular
     # non copyright
+
+    #get campus
+    campus = determineCampus(location)
+
     rec.add_field(
         Field(
             tag='264',
             indicators=[' ','1'],
             subfields=[
-                'a', 'Boca Raton, Florida :',
+                'a', campus+', Florida :',
                 'b', 'Florida Atlantic University,',
                 'c', date1+'.'
             ]))
@@ -173,7 +236,7 @@ def createRecord():
     #get date for subfield....
 
     # add summary note, MARC 520
-    abstact = etdData[1][14].rstrip()
+    abstact = description.replace('\n',' ')
 
     rec.add_field(
         Field(
@@ -183,4 +246,33 @@ def createRecord():
                 'a', abstact
             ]))
 
+    # add URL to Digital Library, MARC 856
+    rec.add_field(
+        Field(
+            tag='856',
+            indicators=['4','0'],
+            subfields=[
+                'z', 'Full text available:',
+                'u', purl
+            ]))
+
     return rec
+
+def writeNewMARC(record):
+    with open(outputFile, 'ab') as x:
+        try:
+            x.write((record.as_marc()))
+        except UnicodeEncodeError:
+            print ("couldn't write")
+
+def runTest(recNum):
+    etdData = readRawData()
+
+    etdRecForTest = recNum
+    testList = [etdData[etdRecForTest][3],etdData[etdRecForTest][2],etdData[etdRecForTest][7],etdData[etdRecForTest][7],
+                etdData[etdRecForTest][16],'Degree TBD', etdData[etdRecForTest][14], etdData[etdRecForTest][13],
+                etdData[etdRecForTest][20]]
+    r = createRecord(testList)
+    writeNewMARC(r)
+    print("Done!")
+    return r
